@@ -1,8 +1,17 @@
 import typing
-
+from commons.ghidra import GhidraAnalysis
+import os
 import click
 from rich import print  # pylint: disable=redefined-builtin
 from rich.table import Table
+from attack_surface_approximation.detector import (
+    analyze_valid_code,
+    print_analysis,
+    get_func_names,
+    print_intro,
+    find_all_vulns,
+    extract_dynamic_functions
+)
 
 from attack_surface_approximation.arguments_fuzzing import (
     ArgumentsFuzzer,
@@ -188,6 +197,45 @@ def analyze(ctx: click.Context, elf: str, dictionary: str) -> None:
     ctx.invoke(detect, elf=elf)
     print("")
     ctx.invoke(fuzz, elf=elf, dictionary=dictionary)
+
+@cli.command(name="ast-check", help="Detecting CWE-134 Vulnerabilities using the source code")
+@click.option(
+    "--source",
+    type=click.Path(exists=True, readable=True),
+    required=True,
+    help="C source code to analyze"
+)
+def ast_check(source):
+    vulns = analyze_valid_code(source)
+    print_analysis(vulns, source)
+
+    if vulns:
+        raise SystemExit(1)
+    
+@cli.command(name="elf-check", help="Detecting CWE-134 Vulnerabilities using the elf executable")
+@click.option(
+    "--elf",
+    type=click.Path(exists=True, readable=True),
+    required=True,
+    help="Elf Executable to analyze"
+)
+def elf_check(elf):
+
+    elf = os.path.abspath(elf)
+
+    print_intro(elf)
+
+    extract_dynamic_functions(elf)
+
+    func_names = get_func_names(elf)
+
+    analysis = GhidraAnalysis(elf)
+
+    vulns = find_all_vulns(analysis, func_names)
+
+    print_analysis(vulns)
+
+
 
 
 def main() -> None:
